@@ -127,7 +127,7 @@ var uploadDirCmd = &cli.Command{
 					if strings.HasPrefix(path, ".") || strings.HasPrefix(filepath.Base(path), ".") {
 						return nil
 					}
-					files = append(files, [3]string{fileOrDir, strings.TrimPrefix(filepath.Dir(path), filepath.Clean(fileOrDir)+"/"), filepath.Base(path)})
+					files = append(files, [3]string{fileOrDir, strings.TrimPrefix(filepath.Dir(path), filepath.Clean(fileOrDir)), filepath.Base(path)})
 					return nil
 				})
 				if err != nil {
@@ -139,6 +139,7 @@ var uploadDirCmd = &cli.Command{
 		}
 
 		for _, pair := range files {
+			fmt.Println(pair)
 			log.Printf("upload file \"%s\" in \"%s\"", pair[2], filepath.Join(pair[0], pair[1]))
 
 			err := uploadFile(ctx, c, repoID, pair[0], pair[1], pair[2], cctx.String("target-dir"))

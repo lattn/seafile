@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"github.com/lattn/seafile"
 	"github.com/urfave/cli/v2"
+	"github.com/vbauerster/mpb/v8"
+	"github.com/vbauerster/mpb/v8/decor"
 	"golang.org/x/crypto/ssh/terminal"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 func main() {
@@ -138,32 +141,65 @@ var uploadDirCmd = &cli.Command{
 			}
 		}
 
-		for _, pair := range files {
-			log.Printf("upload file \"%s\" in \"%s\"", pair[2], filepath.Join(pair[0], pair[1]))
+		var wg sync.WaitGroup
+		p := mpb.New(mpb.WithWaitGroup(&wg), mpb.WithOutput(os.Stderr))
 
-			err := uploadFile(ctx, c, repoID, pair[0], pair[1], pair[2], cctx.String("target-dir"))
-			if err != nil {
-				return err
-			}
+		for _, pair := range files {
+			wg.Add(1)
+			go func(pair [3]string) {
+				defer wg.Done()
+				err := uploadFile(ctx, p, c, repoID, pair[0], pair[1], pair[2], cctx.String("target-dir"))
+				if err != nil {
+					log.Printf("fail to upload file: %s", err)
+				}
+			}(pair)
 		}
+
+		p.Wait()
 
 		return nil
 	},
 }
 
-func uploadFile(ctx context.Context, c *seafile.Client, repoID, base, dir, filename, target string) error {
+func uploadFile(ctx context.Context, progress *mpb.Progress, c *seafile.Client, repoID, base, dir, filename, target string) error {
 	file, err := os.Open(filepath.Join(base, dir, filename))
 	if err != nil {
 		return err
 	}
 	defer file.Close()
+	fi, err := file.Stat()
+	if err != nil {
+		return err
+	}
 
 	link, err := c.GetUploadLink(ctx, repoID)
 	if err != nil {
 		return err
 	}
 
-	_, err = link.UploadFile(ctx, filepath.Join(target, dir, filename), file)
+	reader := reader{r: file, ch: make(chan int)}
+
+	bar := progress.AddBar(fi.Size(),
+		mpb.PrependDecorators(
+			// simple name decorator
+			// decor.DSyncWidth bit enables column width synchronization
+			decor.Name(filepath.Join(base, dir, filename), decor.WCSyncSpace),
+			decor.CurrentKibiByte("%d", decor.WCSyncSpace),
+			decor.TotalKibiByte("%d", decor.WCSyncSpace),
+			decor.AverageSpeed(decor.UnitKiB, "%.1f", decor.WCSyncSpace),
+		),
+		mpb.AppendDecorators(
+			decor.Percentage(decor.WCSyncSpace),
+			decor.Elapsed(decor.ET_STYLE_GO, decor.WCSyncSpace),
+		),
+	)
+	go func() {
+		for size := range reader.ch {
+			bar.IncrBy(size)
+		}
+	}()
+
+	_, err = link.UploadFile(ctx, filepath.Join(target, dir, filename), reader)
 	if err != nil {
 		return err
 	}

@@ -8,8 +8,10 @@ import (
 )
 
 type Repo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Permission string `json:"permission"`
+	MTime      int    `json:"mtime"`
 }
 
 func (c *Client) ListLibraries(ctx context.Context) (repos []Repo, err error) {

@@ -17,6 +17,11 @@ import (
 	"github.com/lattn/seafile"
 )
 
+type uploadMeta struct {
+	sourcePath string
+	uploadPath string
+}
+
 var uploadDirCmd = &cli.Command{
 	Name:      "upload",
 	Usage:     "upload files or directories",
@@ -24,12 +29,12 @@ var uploadDirCmd = &cli.Command{
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:     "repo",
-			Usage:    "target repo",
+			Usage:    "target repo name",
 			Required: true,
 		},
 		&cli.StringFlag{
 			Name:     "target-dir",
-			Usage:    "target directory to upload files in specified dir",
+			Usage:    "target directory to save uploaded files",
 			Required: true,
 		},
 	},
@@ -61,7 +66,7 @@ var uploadDirCmd = &cli.Command{
 			return errors.New("repo not found")
 		}
 
-		var files [][3]string
+		var files []uploadMeta
 		for _, fileOrDir := range cctx.Args().Slice() {
 			fi, err := os.Stat(fileOrDir)
 			if err != nil {
@@ -75,29 +80,35 @@ var uploadDirCmd = &cli.Command{
 					if strings.HasPrefix(path, ".") || strings.HasPrefix(filepath.Base(path), ".") {
 						return nil
 					}
-					files = append(files, [3]string{fileOrDir, strings.TrimPrefix(filepath.Dir(path), filepath.Clean(fileOrDir)), filepath.Base(path)})
+					files = append(files, uploadMeta{
+						sourcePath: path,
+						uploadPath: filepath.Join(cctx.String("target-dir"), strings.TrimPrefix(filepath.Dir(path), filepath.Clean(fileOrDir)), filepath.Base(path)),
+					})
 					return nil
 				})
 				if err != nil {
 					return err
 				}
 			} else {
-				files = append(files, [3]string{filepath.Dir(fileOrDir), "", filepath.Base(fileOrDir)})
+				files = append(files, uploadMeta{
+					sourcePath: fileOrDir,
+					uploadPath: filepath.Join(cctx.String("target-dir"), filepath.Base(fileOrDir)),
+				})
 			}
 		}
 
 		var wg sync.WaitGroup
 		p := mpb.New(mpb.WithWaitGroup(&wg), mpb.WithOutput(os.Stderr))
 
-		for _, pair := range files {
+		for _, meta := range files {
 			wg.Add(1)
-			go func(pair [3]string) {
+			go func(meta uploadMeta) {
 				defer wg.Done()
-				err := uploadFile(ctx, p, c, repoID, pair[0], pair[1], pair[2], cctx.String("target-dir"))
+				err := uploadFile(ctx, p, c, repoID, meta)
 				if err != nil {
 					log.Printf("fail to upload file: %s", err)
 				}
-			}(pair)
+			}(meta)
 		}
 
 		p.Wait()
@@ -106,8 +117,8 @@ var uploadDirCmd = &cli.Command{
 	},
 }
 
-func uploadFile(ctx context.Context, progress *mpb.Progress, c *seafile.Client, repoID, base, dir, filename, target string) error {
-	file, err := os.Open(filepath.Join(base, dir, filename))
+func uploadFile(ctx context.Context, progress *mpb.Progress, c *seafile.Client, repoID string, meta uploadMeta) error {
+	file, err := os.Open(meta.sourcePath)
 	if err != nil {
 		return err
 	}
@@ -128,7 +139,7 @@ func uploadFile(ctx context.Context, progress *mpb.Progress, c *seafile.Client, 
 		mpb.PrependDecorators(
 			// simple name decorator
 			// decor.DSyncWidth bit enables column width synchronization
-			decor.Name(filepath.Join(base, dir, filename), decor.WCSyncSpace),
+			decor.Name(meta.sourcePath, decor.WCSyncSpace),
 			decor.CurrentKibiByte("%d", decor.WCSyncSpace),
 			decor.TotalKibiByte("%d", decor.WCSyncSpace),
 			decor.AverageSpeed(decor.UnitKiB, "%.1f", decor.WCSyncSpace),
@@ -144,7 +155,7 @@ func uploadFile(ctx context.Context, progress *mpb.Progress, c *seafile.Client, 
 		}
 	}()
 
-	_, err = link.UploadFile(ctx, filepath.Join(target, dir, filename), reader)
+	_, err = link.UploadFile(ctx, meta.uploadPath, reader)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ var listRepoCmd = &cli.Command{
 		ctx := context.TODO()
 
 		c := seafile.New(cfg.Endpoint, cfg.Token)
-		repos, err := c.ListLibraries(ctx)
+		repos, err := c.Libraries(ctx)
 		if err != nil {
 			return err
 		}

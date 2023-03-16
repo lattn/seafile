@@ -18,6 +18,7 @@ func main() {
 		initCmd,
 		uploadDirCmd,
 		listRepoCmd,
+		getFileDetail,
 	}
 	err := app.Run(os.Args)
 	if err != nil {

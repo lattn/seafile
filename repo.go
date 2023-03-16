@@ -14,7 +14,7 @@ type Repo struct {
 	MTime      int    `json:"mtime"`
 }
 
-func (c *Client) ListLibraries(ctx context.Context) (repos []Repo, err error) {
+func (c *Client) Libraries(ctx context.Context) (repos []Repo, err error) {
 	req, err := http.NewRequest(http.MethodGet, c.makeURL("/api2/repos"), nil)
 	if err != nil {
 		return
@@ -29,4 +29,18 @@ func (c *Client) ListLibraries(ctx context.Context) (repos []Repo, err error) {
 	}
 	err = json.Unmarshal(body, &repos)
 	return
+}
+
+func (c *Client) LibraryByName(ctx context.Context, name string) (*Repo, error) {
+	libs, err := c.Libraries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, lib := range libs {
+		if lib.Name == name {
+			lib := lib
+			return &lib, nil
+		}
+	}
+	return nil, nil
 }

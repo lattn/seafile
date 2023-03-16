@@ -59,7 +59,7 @@ func (link UploadLink) UploadFile(ctx context.Context, filename string, fileRead
 	return
 }
 
-func (c *Client) GetUploadLink(ctx context.Context, repoID string) (link UploadLink, err error) {
+func (c *Client) CreateUploadLink(ctx context.Context, repoID string) (link UploadLink, err error) {
 	req, err := http.NewRequest(http.MethodGet, c.makeURL(fmt.Sprintf("/api2/repos/%s/upload-link/", repoID)), nil)
 	if err != nil {
 		return

@@ -51,18 +51,12 @@ var uploadDirCmd = &cli.Command{
 		ctx := context.TODO()
 
 		c := seafile.New(cfg.Endpoint, cfg.Token)
-		repos, err := c.ListLibraries(ctx)
+
+		repo, err := c.LibraryByName(ctx, cctx.String("repo"))
 		if err != nil {
 			return err
 		}
-
-		repoID := ""
-		for _, repo := range repos {
-			if repo.Name == cctx.String("repo") {
-				repoID = repo.ID
-			}
-		}
-		if repoID == "" {
+		if repo == nil {
 			return errors.New("repo not found")
 		}
 
@@ -104,7 +98,7 @@ var uploadDirCmd = &cli.Command{
 			wg.Add(1)
 			go func(meta uploadMeta) {
 				defer wg.Done()
-				err := uploadFile(ctx, p, c, repoID, meta)
+				err := uploadFile(ctx, p, c, repo.ID, meta)
 				if err != nil {
 					log.Printf("fail to upload file: %s", err)
 				}
@@ -128,7 +122,7 @@ func uploadFile(ctx context.Context, progress *mpb.Progress, c *seafile.Client, 
 		return err
 	}
 
-	link, err := c.GetUploadLink(ctx, repoID)
+	link, err := c.CreateUploadLink(ctx, repoID)
 	if err != nil {
 		return err
 	}
